@@ -2,6 +2,7 @@
 
 # import all necessary libraries
 import pandas as pd
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 # create a class for the training of the different models with the structure below:
 
@@ -51,3 +52,17 @@ class Articles():
         else:
             # source == 'test'
             self.factorized_test = data
+    def vectorize_words(self, encoded_data):
+        """
+        this method will tokenize input dataframe with encoded labels to facilitate model training.
+        It takes advantage of sklearn tokenizer. Note that this method expects the encoded_data to contain
+        a column called Text with the articles of the data
+        """
+        if 'Text' in df_train.columns:
+            tokenizer_model = TfidfVectorizer(sublinear_tf=True, min_df = 3, norm = 'l2', encoding ='latin-1', ngram_range=(1,2),
+                                              stop_words = 'english')
+            # get the fitted model
+            word_model = tokenizer_model.fit_transform(encoded_data.Text).toarray()
+            self.word_tokens = word_model
+        else:
+            raise ValueError("source contain column with Text title that contains text data")
