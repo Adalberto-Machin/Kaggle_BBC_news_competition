@@ -22,7 +22,9 @@ class Articles():
         # this class takes an input of the train data, and an input of the test data
         # both should be a dataframe
         self.data_train = data_train
+        self.train_row_to_id = dict(enumerate(data_train['ArticleId']))
         self.data_test = data_test
+        self.test_row_to_id = dict(enumerate(data_test['ArticleId']))
     
     def encode_labels(self, source: str = 'train'):
         """
@@ -39,7 +41,6 @@ class Articles():
         # factorize the categories in each data frame
         id_items, cat_items= data.Category.factorize()
         data['category_id'] = id_items
-        
         if source == 'train':
             self.factorized_train = data
             #create a dictionary with the factorization
@@ -63,8 +64,15 @@ class Articles():
             tokenizer_model = TfidfVectorizer(sublinear_tf=True, min_df = 3, norm = 'l2', encoding ='latin-1', ngram_range=(1,2),
                                               stop_words = 'english')
             # get the fitted model
+            # this is a matrix of size: # of artricles, # of words 
             word_model = tokenizer_model.fit_transform(encoded_data.Text).toarray()
             self.word_tokens = word_model
             self.tokenizer_model = tokenizer_model
+            # return a dataframe with all of the information in one place
+            summary_tokens = pd.DataFrame(self.word_tokens, columns = self.tokenizer_model.get_feature_names_out())
+            summary_tokens['category_id'] = self.factorized_train['category_id']
+            summary_tokens['ArticleId'] = self.factorized_train['ArticleId']
+            return summary_tokens
+
         else:
             raise ValueError("source contain column with Text title that contains text data")
