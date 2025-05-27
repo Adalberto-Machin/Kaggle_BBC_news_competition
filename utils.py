@@ -4,6 +4,9 @@
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 import numpy as np
+from sklearn.decomposition import NMF
+from sklearn.metrics import accuracy_score, confusion_matrix
+import itertools
 
 # create a class for the training of the different models with the structure below:
 
@@ -34,13 +37,13 @@ class Articles():
         # Figure out whether to do the factorization with train or with test
         if source ==  'train':
             data = self.data_train
+            # factorize the categories in each data frame
+            id_items, cat_items= data.Category.factorize()
+            data['category_id'] = id_items
         elif source == 'test':
             data  =self.data_test
         else:
             raise ValueError("source must be either train or test")
-        # factorize the categories in each data frame
-        id_items, cat_items= data.Category.factorize()
-        data['category_id'] = id_items
         if source == 'train':
             self.factorized_train = data
             #create a dictionary with the factorization
@@ -67,6 +70,8 @@ class Articles():
             # this is a matrix of size: # of artricles, # of words 
             word_model = tokenizer_model.fit_transform(encoded_data.Text).toarray()
             self.word_tokens = word_model
+            # get a version of the model that is a sparse matrix for further transformation
+            self.word_model_sparse = tokenizer_model.fit_transform(encoded_data.Text)
             self.tokenizer_model = tokenizer_model
             # return a dataframe with all of the information in one place
             summary_tokens = pd.DataFrame(self.word_tokens, columns = self.tokenizer_model.get_feature_names_out())
@@ -76,3 +81,60 @@ class Articles():
 
         else:
             raise ValueError("source contain column with Text title that contains text data")
+    
+    def NMF_execute(self, token_model_sparse, n_components=5, init='nndsvd', solver='cd',
+                    random=42,alpha_W=0.0, alpha_H='same', l1_ratio=0.0, max_iter=200):
+        """
+        This method creates and fits NMF model given the sparse matrix self.word_model_sparse created
+        with the vectorize_words() method. It returns the W and H components that the sparse matrix is
+        decomposed into. The rest of the inputs are hyperparameters that can be modified with the creation
+        of the sklearn model
+        """
+        summary_NNM = token_model_sparse.copy()
+
+        #create the model and user hyperparameters provided in the method
+        model_NMF = NMF(n_components=n_components, init=init, solver=solver, random_state=random,
+                        alpha_W=alpha_W, alpha_H=alpha_H, l1_ratio=l1_ratio, max_iter=max_iter)
+        # fit the model with token data and get the W&H matrices
+        W = model_NMF.fit_transform(summary_NNM)
+        H = model_NMF.components_
+        self.model_NMF = model_NMF
+        return W, H
+    
+    def label_permute_compare(self, ytdf,yp,n=5):
+        """
+        ytdf: labels dataframe object. These are the true labels
+        yp: NMF label prediction output. a numpy array containing the index of
+        the label with the highest score from the W matrix in the NMF_execute method
+        Returns permuted label order and accuracy. 
+        Example output: (3, 4, 1, 2, 0), 0.74 
+        """
+        label_permutation = itertools.permutations(range(n))
+        unique_labels = ytdf['category_id'].unique()
+        #now associate a key of label for each permutation
+        best_perm = None
+        best_acc = 0
+        for perm in label_permutation:
+            key = dict(zip(unique_labels, perm))
+            #map the key to the ytru data
+            ytrue_mapped = ytdf['category_id'].map(key)
+            accuracy = accuracy_score(ytrue_mapped, yp)
+            if accuracy>best_acc:
+                best_acc = accuracy
+                best_perm = perm
+        return best_perm, best_acc
+    
+    def confusion_matrix_mine(self, ytdf,yp, labelorder):
+        """
+        ytdf: labels dataframe object. These are the true labels
+        yp: NMF label prediction output. a numpy array containing the index of
+        the label with the highest score from the W matrix in the NMF_execute method
+        labelorder is the best_perm parameter returned from the label_permute_compare method
+        """
+        cat_types = ytdf['category_id'].unique()
+        key = dict(zip(cat_types, labelorder))
+        ytrue_mapped = ytdf['category_id'].map(key)
+        cm = confusion_matrix(ytrue_mapped,yp)
+        # print(cm)
+        return cm
+
