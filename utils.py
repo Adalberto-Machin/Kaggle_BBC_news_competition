@@ -60,7 +60,8 @@ class Articles():
         a column called Text with the articles of the data
         """
         if 'Text' in encoded_data.columns:
-            tokenizer_model = TfidfVectorizer(sublinear_tf=True, min_df = 3, norm = 'l2', encoding ='latin-1', ngram_range=(1,2),
+            tokenizer_model = TfidfVectorizer(sublinear_tf=True, max_features = 5000, max_df = 0.9, 
+                                              min_df = 3, norm = 'l2', encoding ='latin-1', ngram_range=(1,2),
                                               stop_words = 'english')
             # get the fitted model
             # this is a matrix of size: # of artricles, # of words 
