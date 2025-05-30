@@ -31,32 +31,28 @@ class Articles():
     
     def encode_labels(self, source: str = 'train'):
         """
-        Factorize the data that you are going to be working with to ease with the model building
-        This method takes the created data frame for the train or test sets and it factorizes it
+        Factorize the data (train or test) and create consistent label-to-category mapping.
         """
-        # Figure out whether to do the factorization with train or with test
-        if source ==  'train':
-            data = self.data_train
-            # factorize the categories in each data frame
-            id_items, cat_items= data.Category.factorize()
-            data['category_id'] = id_items
-        elif source == 'test':
-            data  =self.data_test
-        else:
-            raise ValueError("source must be either train or test")
         if source == 'train':
+            data = self.data_train
+            id_items, cat_items = pd.factorize(data['Category'])
+
+            # Apply category IDs
+            data['category_id'] = id_items
             self.factorized_train = data
-            #create a dictionary with the factorization
-            #filter the ids and categories to not have repetition
-            #only create the data map with the train dataset
-            track_item = set()
-            id_list = [id for id in id_items if id not in track_item and not track_item.add(id)]
-            track_cat = set()
-            cat_list = [cat for cat in cat_items if cat not in track_cat and not track_cat.add(cat)]
-            self.category_to_id = dict(zip(id_list, track_cat))
-        else:
-            # source == 'test'
+
+            # Stable mapping using pandas Categorical
+            ordered_categories = pd.Categorical(data['Category']).categories
+            category_to_id = dict(enumerate(ordered_categories))
+            self.category_to_id = category_to_id
+
+        elif source == 'test':
+            data = self.data_test
             self.factorized_test = data
+
+        else:
+            raise ValueError("source must be either 'train' or 'test'")
+
     def vectorize_words(self, encoded_data):
         """
         this method will tokenize input dataframe with encoded labels to facilitate model training.
@@ -64,17 +60,16 @@ class Articles():
         a column called Text with the articles of the data
         """
         if 'Text' in encoded_data.columns:
-            tokenizer_model = TfidfVectorizer(sublinear_tf=True, min_df = 3, norm = 'l2', encoding ='latin-1', ngram_range=(1,2),
+            tokenizer_model = TfidfVectorizer(sublinear_tf=True, max_features = 5000, max_df = 0.9, 
+                                              min_df = 3, norm = 'l2', encoding ='latin-1', ngram_range=(1,2),
                                               stop_words = 'english')
             # get the fitted model
             # this is a matrix of size: # of artricles, # of words 
-            word_model = tokenizer_model.fit_transform(encoded_data.Text).toarray()
-            self.word_tokens = word_model
-            # get a version of the model that is a sparse matrix for further transformation
-            self.word_model_sparse = tokenizer_model.fit_transform(encoded_data.Text)
             self.tokenizer_model = tokenizer_model
+            word_model = tokenizer_model.fit_transform(encoded_data.Text)
+            self.word_tokens_sparse = word_model
             # return a dataframe with all of the information in one place
-            summary_tokens = pd.DataFrame(self.word_tokens, columns = self.tokenizer_model.get_feature_names_out())
+            summary_tokens = pd.DataFrame(self.word_tokens_sparse.toarray(), columns = self.tokenizer_model.get_feature_names_out())
             summary_tokens['category_id'] = self.factorized_train['category_id']
             summary_tokens['ArticleId'] = self.factorized_train['ArticleId']
             return summary_tokens
@@ -95,35 +90,38 @@ class Articles():
         #create the model and user hyperparameters provided in the method
         model_NMF = NMF(n_components=n_components, init=init, solver=solver, random_state=random,
                         alpha_W=alpha_W, alpha_H=alpha_H, l1_ratio=l1_ratio, max_iter=max_iter)
+        self.model_NMF = model_NMF
         # fit the model with token data and get the W&H matrices
         W = model_NMF.fit_transform(summary_NNM)
         H = model_NMF.components_
-        self.model_NMF = model_NMF
         return W, H
     
-    def label_permute_compare(self, ytdf,yp,n=5):
+    def label_permute_compare(self, ytdf, yp, n=5):
         """
-        ytdf: labels dataframe object. These are the true labels
-        yp: NMF label prediction output. a numpy array containing the index of
-        the label with the highest score from the W matrix in the NMF_execute method
-        Returns permuted label order and accuracy. 
-        Example output: (3, 4, 1, 2, 0), 0.74 
-        """
+    #     ytdf: labels dataframe object. These are the true labels
+    #     yp: NMF label prediction output. a numpy array containing the index of
+    #     the label with the highest score from the W matrix in the NMF_execute method
+    #     Returns permuted label order and accuracy. 
+    #     Example output: (3, 4, 1, 2, 0), 0.74 
+    #     """
         label_permutation = itertools.permutations(range(n))
         unique_labels = ytdf['category_id'].unique()
-        #now associate a key of label for each permutation
+        
         best_perm = None
         best_acc = 0
         for perm in label_permutation:
-            key = dict(zip(unique_labels, perm))
-            #map the key to the ytru data
-            ytrue_mapped = ytdf['category_id'].map(key)
-            accuracy = accuracy_score(ytrue_mapped, yp)
-            if accuracy>best_acc:
+            # Create mapping from predicted cluster IDs to true category IDs
+            key = dict(zip(range(n), perm))  # Map cluster 0->perm[0], cluster 1->perm[1], etc.
+            
+            # Map the predicted labels using this permutation
+            yp_mapped = pd.Series(yp).map(key)  # Convert to Series for .map() method
+            
+            accuracy = accuracy_score(ytdf['category_id'], yp_mapped)
+            if accuracy > best_acc:
                 best_acc = accuracy
                 best_perm = perm
         return best_perm, best_acc
-    
+
     def confusion_matrix_mine(self, ytdf,yp, labelorder):
         """
         ytdf: labels dataframe object. These are the true labels
