@@ -42,9 +42,9 @@ class Articles():
             self.factorized_train = data
 
             # Stable mapping using pandas Categorical
-            ordered_categories = pd.Categorical(data['Category']).categories
-            category_to_id = dict(enumerate(ordered_categories))
-            self.category_to_id = category_to_id
+            # keep the exact order that factorize used so IDs stay consistent
+            self.id_to_cat     = dict(enumerate(cat_items))               # 0→'business',1→'tech',…
+            self.cat_to_id     = {v: k for k, v in self.id_to_cat.items()}
 
         elif source == 'test':
             data = self.data_test
@@ -129,8 +129,11 @@ class Articles():
         the label with the highest score from the W matrix in the NMF_execute method
         labelorder is the best_perm parameter returned from the label_permute_compare method
         """
-        cat_types = ytdf['category_id'].unique()
-        key = dict(zip(cat_types, labelorder))
+        cat_types = self.category_to_id.values()
+        # Create a mapping from category IDs to the order in which they appear in labelorder
+        # This ensures that the confusion matrix rows/columns are in the same order as the original categories
+        # Invert labelorder so each true category ID points to its cluster index
+        key = {cat_id: idx for idx, cat_id in enumerate(labelorder)}
         ytrue_mapped = ytdf['category_id'].map(key)
         cm = confusion_matrix(ytrue_mapped,yp)
         # print(cm)
