@@ -129,7 +129,7 @@ class Articles():
         the label with the highest score from the W matrix in the NMF_execute method
         labelorder is the best_perm parameter returned from the label_permute_compare method
         """
-        cat_types = self.category_to_id.values()
+        cat_types = self.id_to_cat.values()
         # Create a mapping from category IDs to the order in which they appear in labelorder
         # This ensures that the confusion matrix rows/columns are in the same order as the original categories
         # Invert labelorder so each true category ID points to its cluster index
@@ -139,3 +139,38 @@ class Articles():
         # print(cm)
         return cm
 
+# class for the development of the supervised model
+class SupervisedArticles(Articles):
+    def __init__(self, data_train, data_test):
+        # this class inherits from Articles and is used for supervised model training
+        # it takes an input of the train data, and an input of the test data
+        # both should be a dataframe
+        # call the parent class constructor
+        # and encodes the labels for both train and test data
+        # then vectorizes the words in the train data
+        # and stores the sparse matrix in self.train_tokens
+        # and the factorized train data in self.factorized_train
+        # and the tokenizer model in self.tokenizer_model
+        # and the id_to_cat mapping in self.id_to_cat
+        # and the cat_to_id mapping in self.cat_to_id
+        super().__init__(data_train, data_test)
+        self.encode_labels(source='train')
+        self.encode_labels(source='test')
+        self.train_tokens = self.vectorize_words(self.factorized_train)
+    
+    def split_train_validation(self, validation_size=0.2):
+        """
+        This method splits the train data into train and validation sets.
+        It returns the train and validation dataframes.
+        """
+        # Shuffle the train data
+        shuffled_data = self.factorized_train.sample(frac=1, random_state=42).reset_index(drop=True)
+        # Calculate the split index
+        split_index = int(len(shuffled_data) * (1 - validation_size))
+        # Split the data
+        train_data = shuffled_data[:split_index]
+        validation_data = shuffled_data[split_index:]
+        return train_data, validation_data
+
+    def train_random_forest (self, train_data, validation_data):
+        
