@@ -7,6 +7,9 @@ import numpy as np
 from sklearn.decomposition import NMF
 from sklearn.metrics import accuracy_score, confusion_matrix
 import itertools
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import accuracy_score
 
 # create a class for the training of the different models with the structure below:
 
@@ -172,5 +175,47 @@ class SupervisedArticles(Articles):
         validation_data = shuffled_data[split_index:]
         return train_data, validation_data
 
-    def train_random_forest (self, train_data, validation_data):
+    def train_random_forest (self, train_data_vectorized, validation_data_vectorized, 
+                             train_data_y, validation_data_y):
+        """
+        This method trains a random forest model on the train data and selects the best hyperparameters
+        using the validation data. It returns the trained model and the best hyperparameters.
+        """
+        # this method trains a random forest model on the train data
+        # it also selects the best hyperparameters for the model using the validation data
+        # train the random forest model with the train data
+        clf = RandomForestClassifier(max_depth=2, random_state=42)
+        clf.fit(train_data_vectorized, train_data_y)
+        self.trained_random_forest = clf
+
+        # predict the accuracy with the trained data
+        trained_predictions = clf.predict(train_data_vectorized)
+        acc_trained = accuracy_score(train_data_y, trained_predictions)
         
+        # do hypperparameter tuning with the validation data
+        # create a grid search for the hyperparameters
+        param_grid = {
+            'n_estimators': [50, 100, 200],
+            'max_depth': [None, 10, 20],
+            'min_samples_split': [2, 5, 10],
+            'min_samples_leaf': [1, 2, 4],
+            'criterion': ['gini', 'entropy', 'log_loss'],
+            'max_features': ['auto', 'sqrt', 'log2'], 
+            'bootstrap': [True, False],
+            'ccp_alpha': [0.0, 0.01, 0.1, 0.5, 1.0]
+            }
+        # create tge girs search object
+        clf_validation = RandomForestClassifier(random_state=42)
+        # do the grid serach action
+        grid_search = GridSearchCV(clf_validation, param_grid, cv=3, n_jobs=-1, verbose=2,scoring='accuracy')
+        # fit the grid search with the validation data
+        grid_search.fit(validation_data_vectorized, validation_data_y)
+        best_params = grid_search.best_params_
+        best_model = grid_search.best_estimator_
+        # predict the accuracy with the validation data
+        validation_predictions = best_model.predict(validation_data_vectorized)
+        acc_validation = accuracy_score(validation_data_y, validation_predictions)
+        self.best_model_random_forest = best_model
+        self.best_parameters_random_forest = best_params
+        return acc_trained, acc_validation
+
