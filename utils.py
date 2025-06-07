@@ -10,6 +10,11 @@ import itertools
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import accuracy_score
+from sklearn.svm import LinearSVC
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.datasets import make_classification
+from sklearn.pipeline import Pipeline
 
 # create a class for the training of the different models with the structure below:
 
@@ -218,4 +223,47 @@ class SupervisedArticles(Articles):
         self.best_model_random_forest = best_model
         self.best_parameters_random_forest = best_params
         return acc_trained, acc_validation
+
+    def train_linear_SVM(self, train_data_vectorized, validation_data_vectorized, 
+                         train_data_y, validation_data_y):
+        """this method uses the vectorized and factorized train data to train a linear SVM model.
+        As an input it takes the train data and the validation data vectorized that the split_train_validation
+        method returns. It uses the train data to train the model and the validation data to select the best hyperparameters.
+        It returns the trained model and the best hyperparameters.
+        """
+        # create initial plain nodel and use standard scaler to scale the data appropriately
+        # since linear SVM is sensitive to the scale of the data
+        clf = Pipeline(steps=[('standardscaler', StandardScaler(with_mean=False)),
+                ('linearsvc', LinearSVC(random_state=0, tol=1e-05))])
+        
+        # fit the model with the train data
+        clf.fit(train_data_vectorized, train_data_y)
+        self.trained_linear_SVM = clf
+        # predict the accuracy with the trained data
+        trained_predictions = clf.predict(train_data_vectorized)
+        acc_trained = accuracy_score(train_data_y, trained_predictions)
+        
+        # evaluate the model with the validation data
+        val_predictions = clf.predict(validation_data_vectorized)
+        acc_val = accuracy_score(validation_data_y, val_predictions)
+        
+        # do hyperparameter tuning with the validation data
+        # create a grid search for the hyperparameters
+        param_grid = {
+            'linearsvc__C': [0.1, 1, 10, 100],
+            'linearsvc__max_iter': [1000, 2000, 3000],
+            'linearsvc__loss': ['hinge', 'squared_hinge'],
+            'linearsvc__dual': [True, False]
+        }
+        # create the grid search object
+        grid_search = GridSearchCV(clf, param_grid, cv=3, n_jobs=-1, verbose=2, scoring='accuracy')
+        # fit the grid search with the validation data
+        grid_search.fit(train_data_vectorized, train_data_y)
+        best_params = grid_search.best_params_
+        best_model = grid_search.best_estimator_
+        # use the best model to predict the accuracy with the validation data
+        validation_predictions_best_model = best_model.predict(validation_data_vectorized)
+        acc_val_best_model = accuracy_score(validation_data_y, validation_predictions_best_model)
+
+        return acc_trained, acc_val, acc_val_best_model, best_params, best_model
 
